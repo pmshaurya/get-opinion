@@ -1,0 +1,8 @@
+{
+  "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/img/(.*)", "destination": "/api" }
+  ],
+  "functions": { "api/index.js": { "maxDuration": 30, "includeFiles": "lib/**" } }
+}

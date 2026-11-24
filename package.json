@@ -1,0 +1,9 @@
+{
+  "name": "get-opinion",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Anonymous crowdsourced A/B decisions",
+  "scripts": { "start": "node api/index.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "express": "^4.21.2", "pg": "^8.13.1" }
+}
