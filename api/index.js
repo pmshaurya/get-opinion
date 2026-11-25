@@ -105,6 +105,11 @@ async function migrate() {
   -- who in a private group has voted: a name only, never their pick, no timestamp
   CREATE TABLE IF NOT EXISTS poll_voted (
     poll_id TEXT NOT NULL REFERENCES polls(id) ON DELETE CASCADE, name TEXT NOT NULL, PRIMARY KEY (poll_id, name));
+  -- days a logged-in user voted (for streaks across devices); a date only, never which poll
+  -- one scrambled check mark per (account, poll) to stop double votes across devices; holds no pick, no ids, no time
+  CREATE TABLE IF NOT EXISTS vote_marks (mark TEXT PRIMARY KEY);
+  CREATE TABLE IF NOT EXISTS user_days (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, day DATE NOT NULL, PRIMARY KEY (user_id, day));
   CREATE TABLE IF NOT EXISTS user_week_votes (
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, week DATE NOT NULL, n INT NOT NULL DEFAULT 0,
     PRIMARY KEY (user_id, week));
@@ -231,6 +236,7 @@ app.use(async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+const voteMark = (userId, pollId) => hash("vm:" + userId + ":" + pollId).slice(0, 40);
 const isAdmin = (u) => !!u && ADMIN_EMAILS.length > 0 && (ADMIN_EMAILS.includes(u.email.toLowerCase()) || ADMIN_EMAILS.map(normEmail).includes(u.email_norm || normEmail(u.email)));
 const meOf = (u) => u ? { loggedIn: true, nick: u.nick, email: u.email, credits: u.credits, refCode: u.ref_code, votesCast: u.votes_cast, onBoards: u.on_boards, admin: isAdmin(u) || undefined } : { loggedIn: false, credits: 0 };
 
@@ -395,6 +401,10 @@ app.post("/api/auth/verify", async (req, res) => {
   }
   let user = (await q(`SELECT * FROM users WHERE email=$1 OR email_norm=$2 ORDER BY (email=$1) DESC, created_at LIMIT 1`, [email, normEmail(email)])).rows[0];
   if (user && user.blocked) return res.status(403).json({ error: "This account has been blocked for breaking the community rules." });
+  if (user && !user.adult_at) {
+    if (req.body?.adult !== true) return res.status(400).json({ error: "Please confirm you’re 18 or older to continue.", needAdult: true });
+    user = (await q(`UPDATE users SET adult_at=now() WHERE id=$1 RETURNING *`, [user.id])).rows[0];
+  }
   let bonus = 0, refBonus = 0;
   if (!user) {
     if (nick.length < 2) return res.status(400).json({ error: "Pick a nickname of at least 2 characters.", needNick: true });
@@ -461,6 +471,11 @@ async function loadPolls(where, params, req) {
     FROM polls p LEFT JOIN votes v ON v.poll_id=p.id
     WHERE ${where} GROUP BY p.id ORDER BY p.created_at DESC LIMIT 300`, [req.voter, ...params]);
   const ownerId = req.user?.id;
+  let marked = new Set();
+  if (req.user && r.rows.length) {
+    const want = new Map(r.rows.filter((p) => !p.pick).map((p) => [voteMark(req.user.id, p.id), p.id]));
+    if (want.size) marked = new Set((await q(`SELECT mark FROM vote_marks WHERE mark = ANY($1)`, [[...want.keys()]])).rows.map((x) => want.get(x.mark)));
+  }
   const pubIds = r.rows.filter((p) => p.vis === "public").map((p) => p.id);
   const groups = {};
   if (pubIds.length) {
@@ -499,6 +514,7 @@ async function loadPolls(where, params, req) {
     if ((o.endsAt && !o.closed && !mine && p.hide_results) || groupSealed) { o.total = o.ca + o.cb; o.ca = null; o.cb = null; o.sealed = true; }
     if (groups[o.id] && !o.sealed) o.groups = groups[o.id];
     o.settled = !!(o.closed || o.groupDone);
+    if (!o.pick && marked.has(o.id)) o.pick = "x"; // voted from another device: counts as answered, side unknown here
     out.push(o);
   }
   return out;
@@ -509,6 +525,7 @@ app.get("/api/state", async (req, res) => {
   const polls = await loadPolls(`(p.vis='public' OR p.owner_id=$2)`, [req.user?.id || "-"], req);
   const me = meOf(req.user);
   if (req.user) {
+    me.days = (await q(`SELECT to_char(day, 'YYYY-MM-DD') AS d FROM user_days WHERE user_id=$1 AND day > CURRENT_DATE - 90 ORDER BY day DESC`, [req.user.id])).rows.map((r) => r.d);
     const r = (await q(`SELECT COUNT(*) FILTER (WHERE paid)::int AS joined, COUNT(*) FILTER (WHERE rewarded_at IS NULL)::int AS pending FROM referrals WHERE referrer_id=$1`, [req.user.id])).rows[0];
     const mine = (await q(`SELECT u.nick, r.rewarded_at FROM referrals r JOIN users u ON u.id=r.referrer_id WHERE r.referee_id=$1`, [req.user.id])).rows[0];
     me.referrals = { joined: r.joined, pending: r.pending, earned: r.joined * REF_REWARD, reward: REF_REWARD, welcome: REF_WELCOME, need: REF_ACTIVATE_VOTES,
@@ -549,6 +566,12 @@ app.get("/api/leaderboard", async (req, res) => {
   let me = null;
   if (req.user) { const r = ranked.find((x) => x.id === req.user.id); me = r ? { rank: +r.rank, n: r.n } : { rank: null, n: 0 }; }
   res.json({ period: week ? "week" : "all", polls, askers, voters, me });
+});
+app.post("/api/me/adult", async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: "Log in first." });
+  if (req.body?.adult !== true) return res.status(400).json({ error: "Please tick the box to confirm." });
+  await q(`UPDATE users SET adult_at=COALESCE(adult_at, now()) WHERE id=$1`, [req.user.id]);
+  res.json({ ok: true });
 });
 app.post("/api/me/boards", async (req, res) => {
   if (!req.user) return res.status(401).json({ error: "Log in first." });
@@ -628,13 +651,14 @@ async function previewSvg(p) {
 app.get("/og/:file", async (req, res) => {
   const id = clean(req.params.file, 60).replace(/\.png$/, "");
   const p = await previewPoll(id);
-  if (!p || !Resvg) return res.redirect(302, "/icon-512.png");
+  const fallback = () => { res.set("Content-Type", "image/png"); res.set("Cache-Control", "public, max-age=600"); res.send(require("fs").readFileSync(path.join(__dirname, "..", "lib", "og-fallback.png"))); };
+  if (!p || !Resvg) return fallback();
   try {
     const png = new Resvg(await previewSvg(p), { font: { fontFiles: [FONT], loadSystemFonts: false, defaultFontFamily: "Bricolage Grotesque" }, fitTo: { mode: "width", value: 1200 } }).render().asPng();
     res.set("Content-Type", "image/png");
     res.set("Cache-Control", "public, max-age=3600, s-maxage=86400");
     res.send(png);
-  } catch (e) { console.error("og_render", e.message); res.redirect(302, "/icon-512.png"); }
+  } catch (e) { console.error("og_render", e.message); fallback(); }
 });
 app.get("/p/:id", async (req, res) => {
   const id = clean(req.params.id, 40);
@@ -646,6 +670,9 @@ app.get("/p/:id", async (req, res) => {
   const title = p.verdict ? `${p.verdict.headline}: ${p.q}` : p.q;
   const desc = p.verdict ? `${p.verdict.line} See the result on Get Opinion.` : p.cat === "debate" && p.an && p.bn ? `${p.an} vs ${p.bn}: ${p.a || "A"} or ${p.b || "B"}? Pick a side, anonymously.` : `${p.a || "Photo A"} or ${p.b || "Photo B"}? Vote anonymously on Get Opinion. Takes 2 seconds.`;
   res.set("Cache-Control", "public, max-age=300, s-maxage=3600");
+  res.set("Vary", "User-Agent");
+  const bot = /whatsapp|facebookexternalhit|facebot|meta-externalagent|instagram|twitterbot|telegrambot|slackbot|discordbot|linkedinbot|skypeuripreview|googlebot|bingbot|pinterest|applebot|redditbot|embedly|vkshare|snapchat/i.test(req.headers["user-agent"] || "");
+  const go = bot ? "" : `<meta http-equiv="refresh" content="0; url=${xml(target)}">\n<script>location.replace(${JSON.stringify(target)});</script>`;
   res.type("html").send(`<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>${xml(title)} · Get Opinion</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -656,8 +683,7 @@ app.get("/p/:id", async (req, res) => {
 <meta property="og:image" content="${xml(o + "/og/" + id + ".png" + (p.verdict ? "?s=1" : ""))}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="${xml(title)}">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${xml(title)}"><meta name="twitter:image" content="${xml(o + "/og/" + id + ".png" + (p.verdict ? "?s=1" : ""))}">
-<meta http-equiv="refresh" content="0; url=${xml(target)}">
-<script>location.replace(${JSON.stringify(target)});</script>
+${go}
 </head><body style="font-family:system-ui;background:#14111C;color:#fff;padding:40px"><p>Opening the poll… <a style="color:#FFB01F" href="${xml(target)}">Tap here</a> if nothing happens.</p></body></html>`);
 });
 
@@ -702,6 +728,7 @@ async function aiScreen(images, question) {
 
 app.post("/api/polls", async (req, res) => {
   if (!req.user) return res.status(401).json({ error: "Log in to post a poll." });
+  if (!req.user.adult_at) return res.status(403).json({ error: "Please confirm you’re 18 or older to post.", needAdult: true });
   if (limited("post:" + req.user.id, 20, 3600e3)) return res.status(429).json({ error: "You’re posting a lot. Try again later." });
   const b = req.body || {};
   const cat = CATS.includes(b.cat) ? b.cat : "random";
@@ -781,6 +808,9 @@ app.post("/api/vote", async (req, res) => {
   if (!p) return res.status(404).json({ error: "This poll isn’t available." });
   if (p.closed) return res.status(400).json({ error: "Voting has closed on this poll. The results are out!" });
   if (req.user && p.owner_id === req.user.id) return res.status(400).json({ error: "You can’t vote on your own poll." });
+  if (req.user && !(await q(`SELECT 1 FROM votes WHERE poll_id=$1 AND voter=$2`, [id, req.voter])).rowCount
+      && (await q(`SELECT 1 FROM vote_marks WHERE mark=$1`, [voteMark(req.user.id, id)])).rowCount)
+    return res.status(409).json({ error: "You’ve already voted on this poll from another device.", votedElsewhere: true });
   let ins;
   const roster = Array.isArray(p.roster) && p.roster.length ? p.roster : null;
   if (roster) {
@@ -828,7 +858,11 @@ app.post("/api/vote", async (req, res) => {
   }
   let credits = req.user?.credits || 0;
   if (ins.rowCount && req.user) {
+    await q(`INSERT INTO vote_marks (mark) VALUES ($1) ON CONFLICT DO NOTHING`, [voteMark(req.user.id, id)]);
     const u = (await q(`UPDATE users SET credits=credits+1, votes_cast=votes_cast+1 WHERE id=$1 RETURNING credits, votes_cast`, [req.user.id])).rows[0];
+    // the voter's own calendar day (sent by the app), accepted only within a day of the server's date
+    const cd = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.day || "")) ? req.body.day : null;
+    await q(`INSERT INTO user_days (user_id, day) VALUES ($1, CASE WHEN $2::date BETWEEN CURRENT_DATE - 1 AND CURRENT_DATE + 1 THEN $2::date ELSE CURRENT_DATE END) ON CONFLICT DO NOTHING`, [req.user.id, cd || new Date().toISOString().slice(0, 10)]);
     await q(`INSERT INTO user_week_votes (user_id, week, n) VALUES ($1, date_trunc('week', now())::date, 1)
       ON CONFLICT (user_id, week) DO UPDATE SET n = user_week_votes.n + 1`, [req.user.id]);
     credits = u.credits; req.user.votes_cast = u.votes_cast;
@@ -865,10 +899,11 @@ app.post("/api/feedback", async (req, res) => {
   await q(`INSERT INTO feedback (id,kind,message,reply_to,poll_id,user_id) VALUES ($1,$2,$3,$4,$5,$6)`, [id, kind, message, replyTo || null, pollId, req.user?.id || null]);
   if (feedbackTo()) {
     const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
-    sendMail({ to: feedbackTo(), replyTo: replyTo || undefined, subject: `[Get Opinion] ${FEEDBACK_KINDS[kind]}${req.user ? " from " + req.user.nick : ""}`,
+    // wait for the email: Vercel stops the function as soon as the reply is sent
+    await Promise.race([sendMail({ to: feedbackTo(), replyTo: replyTo || undefined, subject: `[Get Opinion] ${FEEDBACK_KINDS[kind]}${req.user ? " from " + req.user.nick : ""}`,
       text: `${message}\n\nReply to: ${replyTo || "not given"}${pollId ? "\nPoll: /#poll-" + pollId : ""}`,
       html: `<div style="font-family:Arial,sans-serif;font-size:15px"><p><b>${FEEDBACK_KINDS[kind]}</b>${req.user ? " from " + esc(req.user.nick) : ""}</p><p style="white-space:pre-wrap">${esc(message)}</p><p style="color:#666">Reply to: ${esc(replyTo || "not given")}${pollId ? "<br>Poll: /#poll-" + esc(pollId) : ""}</p></div>` })
-      .catch((e) => console.error("feedback_mail", e.message));
+      .catch((e) => console.error("feedback_mail", e.message)), new Promise((r) => setTimeout(r, 8000))]);
   }
   res.json({ ok: true });
 });
