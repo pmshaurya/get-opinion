@@ -121,6 +121,9 @@ async function refresh(){
   try{
     const j=await api("/api/state");
     S.me=j.me; S.polls=j.polls; S.devCodes=j.devCodes; S.status=""; S.loaded=true;
+    // copy any voting days saved only in this browser up to the account, once per new day found
+    if(S.me.loggedIn){ const have=new Set(S.me.days||[]), mine=(ME.days||[]).filter(d=>!have.has(d));
+      if(mine.length) api("/api/me/days",{method:"POST",body:{days:mine}}).then(r=>{ S.me.days=r.days; updateChrome(); }).catch(()=>{}); }
   }catch(e){ S.status="Can’t reach the server. Check your connection."; }
   softRender();
 }
@@ -751,9 +754,11 @@ function renderMe(v){
     ${R.pending?`<p class="note" style="margin:0 0 10px">${R.pending} ${R.pending===1?"friend has":"friends have"} signed up and ${R.pending===1?"is":"are"} still voting.</p>`:""}
     ${R.invitedBy&&!R.invitedBy.done?`<p class="note" style="margin:0 0 10px">${esc(R.invitedBy.nick)} invited you. Cast ${Math.max(0,R.need-(S.me.votesCast||0))} more votes to send them their bonus.</p>`:""}
     <button class="btn accent" id="meInvite">Share invite link</button></div>`;})():""}
-  <div class="panel"><h3>App and notifications</h3>
-    <p class="note" style="margin:0 0 10px">${isStandalone()?"You’re using the installed app.":"Add Get Opinion to your home screen to open it like an app."}${(()=>{const st=pushState();return st==="on"?" Notifications are on: you’ll hear when your polls get votes and when verdicts land.":st==="denied"?" Notifications are blocked in your browser’s site settings.":st==="ios-install"?" On iPhone, add it to your Home Screen first to get notifications.":st==="unsupported"?" This browser can’t show notifications.":" Notifications are off. They’re only ever on if you turn them on: we’ll tell you when your polls get votes and when verdicts land. No emails, no marketing.";})()}</p>
-    <div class="actions" style="margin:0">${canInstall()?`<button class="btn accent" id="meInst">📲 Add to home screen</button>`:""}${pushState()==="on"?`<button class="btn" id="meOff">Turn off notifications</button>`:["off","ios-install"].includes(pushState())?`<button class="btn" id="meOn">🔔 Turn on notifications</button>`:""}</div></div>
+  <div class="panel"><h3>App and notifications</h3>${(()=>{ const st=pushState(), e=env();
+      const appLine = isStandalone() ? "✓ You’re using the installed app." : e.inApp ? "You’re in another app’s browser. Open Get Opinion in Safari or Chrome to install it." : "Add Get Opinion to your home screen to open it like an app.";
+      const nLine = st==="on" ? "✓ Notifications are on. You’ll hear when your polls get votes and when verdicts land." : st==="denied" ? "Notifications are blocked in your settings. Tap below to see how to allow them." : st==="ios-install" ? "On iPhone, notifications work once Get Opinion is on your Home Screen." : st==="unsupported" ? "This browser can’t show notifications." : "Notifications are off. They’re only ever on if you turn them on. No emails, no marketing.";
+      return `<p class="note" style="margin:0 0 6px"><b>App:</b> ${appLine}</p><p class="note" style="margin:0 0 10px"><b>Notifications:</b> ${nLine}</p>`; })()}
+    <div class="actions" style="margin:0">${!isStandalone()?`<button class="btn accent" id="meInst">📲 Add to home screen</button>`:""}${pushState()==="on"?`<button class="btn" id="meOff">Turn off notifications</button>`:pushState()==="unsupported"?"":`<button class="btn" id="meOn">🔔 Turn on notifications</button>`}</div></div>
   <div class="panel"><h3>Badges</h3><div class="badges">${badges.map(([n,on])=>`<span class="badge ${on?"on":""}">${on?"✓ ":""}${n}</span>`).join("")}</div></div>
   <div class="panel"><h3>How credits work</h3><p class="note" style="margin:0">Voting is open to everyone. Logging in with your email gives you ${SIGNUP_BONUS} credits, every vote while logged in earns 1 more, and posting costs ${POST_COST} for a text poll or ${PHOTO_COST} for a photo poll.</p></div>
   <div class="panel"><h3>Community rules</h3>
@@ -1162,27 +1167,62 @@ function pushState(){
   return ME.push && Notification.permission === "granted" ? "on" : "off";
 }
 function b64(s){ const p="=".repeat((4-s.length%4)%4); const r=atob((s+p).replace(/-/g,"+").replace(/_/g,"/")); return Uint8Array.from(r,c=>c.charCodeAt(0)); }
-async function doInstall(){
-  if(installEvt){ installEvt.prompt(); await installEvt.userChoice.catch(()=>null); installEvt=null; render(); return; }
-  if(isIOS()) openSheet(`<h2>Add to your Home Screen</h2><ol style="padding-left:20px;margin:6px 0 12px"><li style="margin-bottom:8px">Tap the <b>Share</b> button in Safari (the square with an arrow).</li><li style="margin-bottom:8px">Scroll down and tap <b>Add to Home Screen</b>.</li><li>Tap <b>Add</b>.</li></ol><p class="note">On iPhone, notifications work once Get Opinion is on your Home Screen. Open it from there and turn them on in <b>Me</b>.</p><button class="btn primary block" id="okI" style="margin-top:12px">Got it</button>`);
-  else openSheet(`<h2>Install Get Opinion</h2><p class="sub">Open your browser menu (⋮) and tap <b>Install app</b> or <b>Add to Home screen</b>.</p><button class="btn primary block" id="okI">Got it</button>`);
+// which phone and browser this is, so the steps we show actually match the screen
+function env(){
+  const ua=navigator.userAgent||"";
+  const ios=isIOS(), android=/android/i.test(ua);
+  const inApp=/Instagram|FBAN|FBAV|FB_IAB|WhatsApp|Line\/|Snapchat|LinkedInApp|Twitter/i.test(ua);
+  const iosChrome=ios&&/CriOS/.test(ua), iosFirefox=ios&&/FxiOS/.test(ua), iosEdge=ios&&/EdgiOS/.test(ua);
+  const iosSafari=ios&&!iosChrome&&!iosFirefox&&!iosEdge&&!inApp;
+  return {ios,android,inApp,iosChrome,iosFirefox,iosEdge,iosSafari,desktop:!ios&&!android};
+}
+function stepsSheet(title,sub,steps,extra){
+  openSheet(`<h2>${title}</h2>${sub?`<p class="sub">${sub}</p>`:""}<ol style="padding-left:20px;margin:6px 0 12px">${steps.map(x=>`<li style="margin-bottom:8px">${x}</li>`).join("")}</ol>${extra||""}<button class="btn primary block" id="okI" style="margin-top:8px">Got it</button>`);
   $("#okI").onclick=closeSheet;
+  $("#cpL")&&($("#cpL").onclick=async()=>toast(await copyText(location.origin)?"Link copied. Paste it in your browser.":"Copy failed. Type get-opinion.vercel.app"));
+}
+async function doInstall(){
+  if(isStandalone()){ toast("You’re already using the installed app."); return; }
+  if(installEvt){ installEvt.prompt(); await installEvt.userChoice.catch(()=>null); installEvt=null; render(); return; }
+  const e=env();
+  if(e.inApp) return stepsSheet("Open in your browser first","You’re inside another app’s built-in browser (like Instagram or WhatsApp), which can’t add apps to your home screen.",
+    [`Tap the <b>⋯</b> or <b>⋮</b> menu at the top.`,`Choose <b>Open in ${e.ios?"Safari":"Chrome"}</b> (or <b>Open in browser</b>).`,`Then tap <b>Add to home screen</b> again from there.`],
+    `<button class="btn block" id="cpL">Copy the link instead</button>`);
+  if(e.iosSafari) return stepsSheet("Add to your Home Screen","",[`Tap the <b>Share</b> button at the bottom of Safari (a square with an arrow).`,`Scroll down and tap <b>Add to Home Screen</b>.`,`Tap <b>Add</b>. Get Opinion now opens like an app from your home screen.`]);
+  if(e.iosChrome||e.iosEdge) return stepsSheet("Add to your Home Screen","",[`Tap the <b>Share</b> button at the top right of ${e.iosChrome?"Chrome":"Edge"} (a square with an arrow).`,`Scroll down and tap <b>Add to Home Screen</b>.`,`Tap <b>Add</b>.`],`<p class="note">Don’t see it? Open get-opinion.vercel.app in Safari and add it from there.</p>`);
+  if(e.ios) return stepsSheet("Add to your Home Screen","This browser can’t add apps to the Home Screen.",[`Open <b>get-opinion.vercel.app</b> in <b>Safari</b>.`,`Tap <b>Share</b>, then <b>Add to Home Screen</b>.`],`<button class="btn block" id="cpL">Copy the link</button>`);
+  if(e.android) return stepsSheet("Add to your home screen","",[`Tap the <b>⋮</b> menu at the top right of Chrome.`,`Tap <b>Add to Home screen</b> or <b>Install app</b>.`,`Tap <b>Install</b> or <b>Add</b>.`],`<p class="note">If you don’t see the option, Get Opinion may already be installed. Check your home screen or app drawer.</p>`);
+  return stepsSheet("Install Get Opinion on this computer","",[`Look for the <b>install icon</b> at the right end of the address bar (a screen with a down arrow) and click it.`,`Or open the <b>⋮</b> menu, then <b>Cast, save and share</b>, then <b>Install page as app</b>.`],`<p class="note">Works in Chrome and Edge. Safari and Firefox don’t support installing on computers.</p>`);
 }
 async function enablePush(){
-  const st=pushState();
-  if(st==="ios-install"){ doInstall(); return false; }
-  if(st==="unsupported"){ toast("This browser can’t show notifications. Try Chrome."); return false; }
-  if(st==="denied"){ toast("Notifications are blocked. Allow them in your browser’s site settings."); return false; }
+  const st=pushState(), e=env();
+  if(e.inApp) return doInstall(), false;
+  if(st==="ios-install"){
+    stepsSheet("Notifications on iPhone","Apple only allows notifications from apps on your Home Screen, so it’s a 3-step setup (iOS 16.4 or newer).",
+      [`Add Get Opinion to your Home Screen. <button class="btn ghost" id="howI" style="padding:0;font-size:inherit;text-decoration:underline">Show me how</button>`,`Close this browser tab and open <b>Get Opinion</b> from its Home Screen icon.`,`Go to <b>Me</b> and tap <b>Turn on notifications</b>, then <b>Allow</b>.`]);
+    $("#howI").onclick=()=>doInstall();
+    return false;
+  }
+  if(st==="unsupported"){ stepsSheet("Notifications aren’t available here","This browser doesn’t support web notifications.",[e.ios?"Use Safari on iOS 16.4 or newer, from the Home Screen app.":"Open get-opinion.vercel.app in Chrome or Edge, then try again."]); return false; }
+  if(st==="denied"){ stepsSheet("Notifications are blocked","You (or your phone) said no earlier, so the browser won’t ask again. To allow them:",
+      e.ios?[`Open your iPhone <b>Settings</b>.`,`Tap <b>Notifications</b>, then <b>Get Opinion</b>.`,`Turn on <b>Allow Notifications</b>.`]
+      :e.android?[`Tap the <b>lock</b> or <b>settings</b> icon left of the address bar.`,`Tap <b>Permissions</b>, then <b>Notifications</b>.`,`Choose <b>Allow</b>, then reload the page.`]
+      :[`Click the <b>lock</b> or <b>settings</b> icon left of the address bar.`,`Set <b>Notifications</b> to <b>Allow</b>.`,`Reload the page and turn them on again in Me.`]); return false; }
   try{
     const perm=await Notification.requestPermission();
-    if(perm!=="granted"){ toast("Notifications not turned on"); return false; }
-    const reg=await navigator.serviceWorker.ready;
+    if(perm==="default"){ toast("You closed the permission box. Tap again and choose Allow."); return false; }
+    if(perm!=="granted"){ return enablePush(); }
+    const reg=await Promise.race([navigator.serviceWorker.ready, new Promise((_,rej)=>setTimeout(()=>rej(new Error("sw")),6000))]);
     const {key}=await api("/api/push/key");
     let sub=await reg.pushManager.getSubscription();
     if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64(key)});
     await api("/api/push/subscribe",{method:"POST",body:{sub:sub.toJSON()}});
-    ME.push=true; saveMe(); toast("Notifications on 🔔"); return true;
-  }catch(e){ toast("Couldn’t turn on notifications. Try again."); return false; }
+    ME.push=true; saveMe(); toast("Notifications on 🔔 You’ll hear about your polls and verdicts."); return true;
+  }catch(err){
+    const m=String(err&&err.message||"");
+    toast(m==="sw" ? "The app is still setting up. Reload the page and try again." : /network|fetch/i.test(m) ? "No connection right now. Check your internet and try again." : "Couldn’t turn on notifications ("+(m||"unknown reason").slice(0,60)+"). Reload and try again.");
+    return false;
+  }
 }
 async function disablePush(){
   try{ const reg=await navigator.serviceWorker.ready; const sub=await reg.pushManager.getSubscription();
