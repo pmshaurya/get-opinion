@@ -4,6 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Get Opinion</title>
+<meta name="description" content="Can’t decide? Let strangers pick A or B. Settle debates with friends, anonymously.">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#F4F3F8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14111C" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Get Opinion">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta property="og:title" content="Get Opinion">
+<meta property="og:description" content="Can’t decide? Let strangers pick A or B.">
+<meta property="og:image" content="/icon-512.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
@@ -26,6 +39,7 @@
   --a:#7A5CFF;--a-soft:#2C2452;--a-ink:#FFFFFF;--b:#FFBE45;--b-soft:#3A2E12;--b-ink:#2A1A00;
   --danger:#FF6B7F;--ok:#7BCB86;--shadow:0 10px 30px -12px rgba(0,0,0,.6);color-scheme:dark}
 *,*::before,*::after{box-sizing:inherit}
+[hidden]{display:none!important}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased;min-height:100%}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--bg)}
@@ -33,7 +47,9 @@ button,input,textarea,select{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:3px solid var(--a);outline-offset:2px}
 img{max-width:100%;display:block}
-.wrap{max-width:520px;margin:0 auto;padding:0 16px 120px}
+.wrap{max-width:520px;margin:0 auto;padding:0 16px 24px}
+.foot{max-width:520px;margin:0 auto;padding:8px 16px calc(96px + env(safe-area-inset-bottom,0px));display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:center;font-size:.82rem;color:var(--muted)}
+.foot a{color:var(--muted);text-decoration:none}.foot a:hover{color:var(--ink);text-decoration:underline}
 
 /* Top bar */
 .top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);display:flex;align-items:center;gap:10px;padding:12px 16px;max-width:520px;margin:0 auto}
@@ -79,10 +95,20 @@ img{max-width:100%;display:block}
 .side .pct{font-size:2.3rem;font-weight:800;letter-spacing:-.04em;line-height:1;display:none;position:relative}
 .split.imgs{min-height:0;height:min(58vh,440px)}
 .side.has-img{padding:0;justify-content:flex-end}
-.side.has-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.side.has-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:1}
+/* discourage saving poll photos: no long-press menu, no dragging, no selecting */
+.side.has-img img,.viewer img,.tile img,.imgbg{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
+.side.has-img .imgbg{position:absolute;inset:-24px;background-size:cover;background-position:center;filter:blur(18px) brightness(.65);transform:scale(1.05)}
+.side .zoom{position:absolute;right:8px;top:8px;z-index:4;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:rgba(0,0,0,.55);color:#fff;font-size:1rem;cursor:zoom-in}
+.side.chosen .zoom{top:40px}
+.viewer{display:flex;flex-direction:column;gap:14px}
+.viewer figure{margin:0;position:relative;scroll-margin-top:10px}
+.viewer img{width:100%;max-height:70vh;object-fit:contain;border-radius:14px;background:var(--surface-2)}
+.viewer figcaption{font-weight:700;margin-top:6px}
+.vtag{position:absolute;left:8px;top:8px;font-weight:800;border-radius:8px;padding:2px 9px}.vtag.a{background:var(--a);color:var(--a-ink)}.vtag.b{background:var(--b);color:var(--b-ink)}
 .side.has-img .cap{position:relative;z-index:2;padding:28px 10px 10px;display:flex;flex-direction:column;gap:2px;background:linear-gradient(transparent,rgba(0,0,0,.7));color:#fff}
 .side.has-img .letter{top:6px;left:8px;opacity:.95;font-size:1.5rem;background:inherit;border-radius:8px;padding:2px 8px;z-index:3}
-.side.has-img .side-pct-wrap{position:absolute;inset:0;z-index:1;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.35);color:#fff}
+.side.has-img .side-pct-wrap{position:absolute;inset:0;z-index:2;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.35);color:#fff}
 .split.voted .side .pct{display:block}
 .split.voted .side.has-img .side-pct-wrap{display:flex}
 .split.voted .side.has-img .side-pct-wrap .pct{display:block}
@@ -91,6 +117,33 @@ img{max-width:100%;display:block}
 .side.chosen::after{content:"Your pick";position:absolute;top:10px;right:10px;font-size:.72rem;font-weight:800;background:rgba(255,255,255,.92);color:#1B1630;border-radius:99px;padding:3px 8px}
 .split:not(.voted) .side:active{transform:scale(.98)}
 .hint{text-align:center;color:var(--muted);font-size:.82rem;margin:10px 0 0}
+.byline{margin:-8px 0 12px;font-size:.88rem;color:var(--muted)}
+.byline a{color:var(--ink);font-weight:700;text-decoration:underline;text-underline-offset:2px}
+.avatar{flex:none;width:52px;height:52px;border-radius:16px;background:var(--a);color:var(--a-ink);display:grid;place-items:center;font-weight:800;font-size:1.5rem}
+.board{display:flex;flex-direction:column;gap:8px}
+.brow{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 14px;text-decoration:none;color:inherit}
+.brow.you{border-color:var(--a);box-shadow:0 0 0 1px var(--a) inset}
+.rank{flex:none;width:30px;height:30px;border-radius:10px;display:grid;place-items:center;font-weight:800;font-size:.9rem;background:var(--surface-2)}
+.rank.r1{background:var(--b);color:var(--b-ink)}.rank.r2{background:var(--a);color:var(--a-ink)}.rank.r3{background:var(--a-soft)}
+.brow .who2{flex:1;min-width:0}.brow .who2 b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brow .who2 span{font-size:.82rem;color:var(--muted)}
+.brow .num{font-weight:800;white-space:nowrap}
+.groups{margin:12px 0 0;padding:12px;border-radius:14px;background:var(--surface-2)}
+.grow{display:grid;grid-template-columns:84px 1fr auto;gap:10px;align-items:center;font-size:.85rem;margin:6px 0}
+.grow .gl{font-weight:700}.grow .gp{color:var(--muted);white-space:nowrap}
+.grow .gb{height:8px;border-radius:99px;background:var(--line);overflow:hidden}
+.grow .gb span{display:block;height:100%;border-radius:99px}.grow .sa{background:var(--a)}.grow .sb{background:var(--b)}
+.vcard{display:flex;gap:12px;align-items:center;border-radius:18px;padding:14px 16px;margin:0 0 12px;background:var(--b-soft)}
+.vcard.win{background:var(--b);color:var(--b-ink)}
+.vcard .vemoji{font-size:1.8rem;line-height:1}
+.vcard b{display:block;font-size:1.15rem;letter-spacing:-.01em}
+.vcard span span{display:block;font-weight:600}
+.side.loser{opacity:.45}
+.side.winner{box-shadow:0 0 0 3px var(--ink) inset}
+.justsettled{display:flex;gap:10px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 14px;margin-bottom:14px;color:inherit;text-decoration:none;font-size:.92rem}
+.justsettled span:nth-child(2){flex:1;min-width:0}
+.vnote{display:block;font-size:.82rem;font-weight:600;opacity:.85;margin-top:2px}
+.extend{margin:12px 0 0;padding:12px;border-radius:14px;background:var(--surface-2)}
 .verdict{min-height:1.4em;font-weight:700;margin:12px 0 0;text-align:center}
 .actions{display:flex;gap:8px;margin-top:12px;align-items:center}
 .btn{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:10px 14px;font-weight:600;font-size:.95rem;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none}
@@ -125,7 +178,7 @@ textarea.field{resize:vertical;min-height:72px}
 .upl{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .tile{position:relative;border-radius:14px;aspect-ratio:3/4;overflow:hidden;border:2px dashed var(--line);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;background:var(--bg);font-weight:600;text-align:center;padding:8px}
 .tile.a{border-color:var(--a)}.tile.b{border-color:var(--b)}
-.tile img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.tile img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#111}
 .tile input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .tile .st{position:absolute;left:6px;bottom:6px;right:6px;font-size:.75rem;background:rgba(0,0,0,.65);color:#fff;border-radius:8px;padding:3px 6px;z-index:2}
 .check{display:flex;gap:10px;align-items:flex-start;font-size:.92rem;margin-top:12px}
@@ -189,6 +242,46 @@ textarea.field{resize:vertical;min-height:72px}
 .status{font-size:.82rem;color:var(--muted);text-align:center;margin:0 0 10px}
 .ob li{margin-bottom:10px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ---------- Desktop and laptop ---------- */
+.rail{display:none}
+@media (min-width: 960px){
+  body{padding-left:236px}
+  body::before{display:none}
+  .top{max-width:1120px;padding:18px 36px 10px}
+  .top .logo{visibility:hidden}
+  .wrap{max-width:1120px;padding:0 36px 60px}
+  .wrap:not(.is-feed)>*{max-width:720px;margin-left:auto;margin-right:auto}
+  .wrap.is-feed{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:32px;align-items:start}
+  .rail{display:block;position:sticky;top:20px}
+  .rail .panel{margin-bottom:14px}
+  .hero h1{font-size:2.9rem}
+  .hero p{font-size:1.08rem;max-width:52ch}
+  .chips{margin:0;padding:4px 0 14px;flex-wrap:wrap;overflow:visible}
+  .card{padding:22px}
+  .q{font-size:1.9rem}
+  .split{min-height:clamp(220px,34vh,320px);gap:12px}
+  .split.imgs{height:min(62vh,540px)}
+  .side{padding:20px 18px 16px;border-radius:22px;transition:flex-grow .7s cubic-bezier(.2,.9,.2,1),opacity .3s,transform .15s}
+  .split:not(.voted) .side:hover{transform:translateY(-3px)}
+  .side .opt{font-size:1.25rem}
+  .side .pct{font-size:3rem}
+  .side .letter{font-size:3.4rem}
+  .nav{top:0;bottom:0;left:0;right:auto;width:236px;border-top:0;border-right:1px solid var(--line);padding-bottom:0}
+  .nav-in{flex-direction:column;align-items:stretch;justify-content:flex-start;height:100%;gap:4px;padding:18px 14px}
+  .nav-in::before{content:"Get Opinion";font-weight:800;font-size:1.25rem;letter-spacing:-.02em;padding:6px 12px 18px 52px;background:linear-gradient(90deg,var(--a) 0 14px,var(--b) 14px 28px) no-repeat 12px 8px/28px 28px;border-radius:0;order:-2}
+  .nav a{flex-direction:row;gap:12px;font-size:1rem;padding:11px 14px;min-width:0;justify-content:flex-start}
+  .nav a svg{width:22px;height:22px}
+  .nav a[aria-current="page"]{background:var(--surface-2)}
+  .nav a.ask{order:-1;justify-content:center;margin-bottom:10px;padding:12px 16px}
+  .nav a.ask[aria-current="page"]{background:var(--ink)}
+  .scrim{align-items:center}
+  .sheet{border-radius:24px;max-height:86vh;padding-bottom:24px}
+  .toast{bottom:28px;left:calc(50% + 118px)}
+  .stats{grid-template-columns:repeat(4,1fr)}
+  .foot{position:fixed;left:0;bottom:0;width:236px;z-index:26;justify-content:flex-start;padding:14px 26px;gap:6px 14px;margin:0;max-width:none}
+}
+@media (min-width: 1280px){ .wrap.is-feed{grid-template-columns:minmax(0,1fr) 340px} }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -199,9 +292,11 @@ textarea.field{resize:vertical;min-height:72px}
   <span class="pill hot" id="streakPill" title="Daily voting streak">🔥 0</span>
 </header>
 <main class="wrap" id="view" aria-live="polite"></main>
+<footer class="foot" aria-label="About and legal"><a href="#about">About</a><a href="#terms" data-foot="terms">Terms</a><a href="#privacy" data-foot="privacy">Privacy</a><a href="#contact" data-foot="contact">Contact</a><a href="https://instagram.com/teamgetopinion" target="_blank" rel="noopener">Instagram</a><span>© Get Opinion</span></footer>
 <nav class="nav" aria-label="Main">
   <div class="nav-in">
     <a href="#vote" data-v="vote"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="8" height="14" rx="2"/><rect x="13" y="5" width="8" height="14" rx="2"/></svg>Vote</a>
+    <a href="#top" data-v="top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/></svg>Top</a>
     <a href="#ask" data-v="ask" class="ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Ask</a>
     <a href="#mine" data-v="mine"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>My polls</a>
     <a href="#me" data-v="me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>Me</a>
