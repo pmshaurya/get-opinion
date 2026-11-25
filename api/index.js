@@ -567,6 +567,15 @@ app.get("/api/leaderboard", async (req, res) => {
   if (req.user) { const r = ranked.find((x) => x.id === req.user.id); me = r ? { rank: +r.rank, n: r.n } : { rank: null, n: 0 }; }
   res.json({ period: week ? "week" : "all", polls, askers, voters, me });
 });
+// carry voting days saved in this browser over to the account (dates only, last 90 days, nothing in the future)
+app.post("/api/me/days", async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: "Log in first." });
+  const days = (Array.isArray(req.body?.days) ? req.body.days : []).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d))).slice(0, 90);
+  if (days.length) await q(`INSERT INTO user_days (user_id, day) SELECT $1, d::date FROM unnest($2::text[]) d
+      WHERE d::date BETWEEN CURRENT_DATE - 90 AND CURRENT_DATE + 1 ON CONFLICT DO NOTHING`, [req.user.id, days]);
+  const all = (await q(`SELECT to_char(day, 'YYYY-MM-DD') AS d FROM user_days WHERE user_id=$1 AND day > CURRENT_DATE - 90 ORDER BY day DESC`, [req.user.id])).rows.map((r) => r.d);
+  res.json({ days: all });
+});
 app.post("/api/me/adult", async (req, res) => {
   if (!req.user) return res.status(401).json({ error: "Log in first." });
   if (req.body?.adult !== true) return res.status(400).json({ error: "Please tick the box to confirm." });
