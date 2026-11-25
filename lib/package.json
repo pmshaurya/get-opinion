@@ -1,0 +1,19 @@
+{
+  "name": "get-opinion",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Anonymous crowdsourced A/B decisions",
+  "scripts": {
+    "start": "node api/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "express": "^4.21.2",
+    "nodemailer": "^6.9.16",
+    "pg": "^8.13.1",
+    "web-push": "^3.6.7"
+  }
+}
