@@ -37,7 +37,9 @@ function verdictOf(p){
   if(p.cat==="debate"&&p.an&&p.bn) return {kind:"win",side:w,pct,T,low,note,emoji:"⚖️",headline:`It’s settled! ${w==="a"?p.an:p.bn} wins`,line:`${label(w)}. ${pct}% agree.`};
   return {kind:"win",side:w,pct,T,low,note,emoji:"✅",headline:p.by?`It’s settled for ${p.by}`:"It’s settled",line:`${label(w)} wins. ${pct}% agree.`};
 }
-const todayKey = () => new Date().toISOString().slice(0,10);
+// local calendar day (India time for Indian users), not UTC
+const dayKey = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const todayKey = () => dayKey(new Date());
 function lsGet(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}
 let toastT;
@@ -54,15 +56,7 @@ async function api(path,opts={}){
 }
 
 /* ---------- Prompt templates ---------- */
-const TEMPLATES = {
-  design:[["Which logo feels more premium?","Serif wordmark","Geometric monogram"],["Which thumbnail would you click?","","",true],["Book cover: illustrated or typographic?","Illustrated","Typographic"],["Brand color: bold or muted?","Bold","Muted"],["Presentation: fewer slides or more detail?","Fewer slides","More detail"]],
-  style:[["Which haircut suits me better?","","",true],["Interview outfit: suit or smart casual?","Suit","Smart casual"],["Which outfit for the wedding?","","",true],["Watch or no watch?","Watch","No watch"],["Short nails or long nails?","Short","Long"]],
-  dating:[["Which opener gets a reply?","Hey, how’s your week?","Settle a debate: is cereal soup?"],["Which profile photo should go first?","","",true],["Text back now or wait an hour?","Now","Wait an hour"],["Say ‘I like you’ first or wait?","Say it","Wait"],["Plan a surprise or ask what they want?","Surprise","Ask"]],
-  everyday:[["Which paint color for the room?","","",true],["Take the higher-paying job or the one I enjoy?","Higher pay","Enjoyment"],["Get a dog or a cat?","Dog","Cat"],["Buy a car or keep using cabs?","Buy a car","Keep using cabs"],["Weekend: rest or socialise?","Rest","Socialise"]],
-  fun:[["Who’s the greatest of all time?","",""],["Marvel or DC?","Marvel","DC"],["Which jersey for game day?","","",true],["Biryani or pizza for the watch party?","Biryani","Pizza"],["Early bird or night owl?","Early bird","Night owl"]],
-  random:[["Window seat or aisle seat?","Window","Aisle"],["Call or text?","Call","Text"],["Sweet or savoury breakfast?","Sweet","Savoury"],["Time machine: past or future?","Past","Future"],["Cats or dogs?","Cats","Dogs"]],
-  debate:[["Who’s right about the AC temperature?","22°C is perfect","26°C saves the planet"],["Who should pick the movie tonight?","The one who picked last time? No.","Whoever lost the toss"],["Is it cheating to watch ahead on a shared show?","Yes, betrayal","No, it’s my time"],["Who owes who an apology?","",""],["Is a 5-minute late arrival actually late?","Yes, time is time","No, that’s on time"]]
-};
+const TEMPLATES = {"design": [["Which logo feels more premium?", "Serif wordmark", "Geometric monogram"], ["Which thumbnail would you click?", "", "", true], ["Book cover: illustrated or typographic?", "Illustrated", "Typographic"], ["Brand color: bold or muted?", "Bold", "Muted"], ["Presentation: fewer slides or more detail?", "Fewer slides", "More detail"], ["Phone wallpaper: minimal or busy?", "Minimal", "Busy"], ["Instagram feed: neat grid or post whatever?", "Neat grid", "Post whatever"], ["Which poster design wins?", "", "", true], ["Wedding card: traditional or modern?", "Traditional", "Modern"], ["Logo: icon only or full name?", "Icon only", "Full name"], ["Which LinkedIn cover photo?", "", "", true], ["Brand font: serif or sans-serif?", "Serif", "Sans-serif"], ["Reel cover: my face or bold text?", "My face", "Bold text"], ["Website hero: photo or illustration?", "Photo", "Illustration"], ["My app: dark mode or light mode?", "Dark", "Light"]], "style": [["Which haircut suits me better?", "", "", true], ["Interview outfit: suit or smart casual?", "Suit", "Smart casual"], ["Which outfit for the wedding?", "", "", true], ["Watch or no watch?", "Watch", "No watch"], ["Short nails or long nails?", "Short", "Long"], ["Which outfit for the office party?", "", "", true], ["Diwali look: ethnic or western?", "Ethnic", "Western"], ["Beard: stubble or full beard?", "Stubble", "Full beard"], ["Which sunglasses suit me?", "", "", true], ["Kurta with jeans: yes or no?", "Yes, stylish", "No, never"], ["Sneakers to a wedding?", "Totally fine", "Never"], ["Hair colour: go bold or stay natural?", "Go bold", "Stay natural"], ["Which watch goes with a suit?", "", "", true], ["Sangeet: saree or lehenga?", "Saree", "Lehenga"], ["Curtain bangs: do it or don’t?", "Do it", "Don’t"]], "dating": [["Which opener gets a reply?", "Hey, how’s your week?", "Settle a debate: is cereal soup?"], ["Which profile photo should go first?", "", "", true], ["Text back now or wait an hour?", "Now", "Wait an hour"], ["Say ‘I like you’ first or wait?", "Say it", "Wait"], ["Plan a surprise or ask what they want?", "Surprise", "Ask"], ["Which dating bio sounds better?", "Chai over coffee, always", "Looking for my travel partner"], ["First date: street food walk or café?", "Street food walk", "Café"], ["Should I double text?", "Yes, send it", "No, wait"], ["Tell my parents about us now or later?", "Now", "Later"], ["Reply in 5 minutes or 5 hours?", "5 minutes", "5 hours"], ["First anniversary gift: an experience or something to keep?", "Experience", "Keepsake"], ["Long distance: try it or let it go?", "Try it", "Let it go"], ["Ex wants to stay friends: yes or no?", "Yes", "No"], ["Who should say ‘I love you’ first?", "Me", "Wait for them"], ["Meet their friends on the 3rd date or later?", "3rd date", "Later"]], "everyday": [["Which paint color for the room?", "", "", true], ["Take the higher-paying job or the one I enjoy?", "Higher pay", "Enjoyment"], ["Get a dog or a cat?", "Dog", "Cat"], ["Buy a car or keep using cabs?", "Buy a car", "Keep using cabs"], ["Weekend: rest or socialise?", "Rest", "Socialise"], ["Job offer: startup or MNC?", "Startup", "MNC"], ["MBA now or work 2 more years?", "MBA now", "Work first"], ["Buy a house or keep renting?", "Buy", "Rent"], ["Next phone: iPhone or Android?", "iPhone", "Android"], ["Gym membership or home workouts?", "Gym", "Home"], ["Move to Bangalore or stay in my city?", "Move", "Stay"], ["Bonus: save it or take a trip?", "Save it", "Take the trip"], ["Learn coding or design?", "Coding", "Design"], ["Wake up at 5 am: worth it?", "Worth it", "Not for me"], ["First car: EV or petrol?", "EV", "Petrol"]], "fun": [["Who’s the greatest of all time?", "", ""], ["Marvel or DC?", "Marvel", "DC"], ["Which jersey for game day?", "", "", true], ["Biryani or pizza for the watch party?", "Biryani", "Pizza"], ["Early bird or night owl?", "Early bird", "Night owl"], ["Best IPL captain ever?", "Dhoni", "Rohit"], ["Biryani: Hyderabadi or Lucknowi?", "Hyderabadi", "Lucknowi"], ["Shah Rukh or Salman?", "SRK", "Salman"], ["New Year: mountains or beaches?", "Mountains", "Beaches"], ["Goa trip: North or South?", "North Goa", "South Goa"], ["Better batter: Virat or Rohit?", "Virat", "Rohit"], ["Netflix or Prime Video?", "Netflix", "Prime Video"], ["Momos: steamed or fried?", "Steamed", "Fried"], ["Superpower: teleport or read minds?", "Teleport", "Read minds"], ["Game night: board games or video games?", "Board games", "Video games"]], "debate": [["Who’s right about the AC temperature?", "22°C is perfect", "26°C saves the planet"], ["Who should pick the movie tonight?", "The one who picked last time? No.", "Whoever lost the toss"], ["Is it cheating to watch ahead on a shared show?", "Yes, betrayal", "No, it’s my time"], ["Who owes who an apology?", "", ""], ["Is a 5-minute late arrival actually late?", "Yes, time is time", "No, that’s on time"], ["Split the bill by what each person ate?", "Yes, that’s fair", "No, split equally"], ["Pani puri: spicy or sweet water?", "Spicy", "Sweet"], ["Friends’ trip: does the planner pay less?", "Yes, they did the work", "No, everyone pays equal"], ["Is replying ‘ok’ rude?", "Yes, rude", "No, it’s fine"], ["Ketchup on Maggi: allowed?", "Allowed", "A crime"], ["Window seat: whoever booked or whoever asked first?", "Whoever booked", "Whoever asked first"], ["Whoever cooks shouldn’t wash dishes?", "Agreed", "No way"], ["Calling without texting first: rude?", "Rude", "Totally fine"], ["Remote control: guest or host?", "Guest", "Host"], ["Is googling during quiz night cheating?", "Cheating", "Fair game"]], "random": [["Window seat or aisle seat?", "Window", "Aisle"], ["Call or text?", "Call", "Text"], ["Sweet or savoury breakfast?", "Sweet", "Savoury"], ["Time machine: past or future?", "Past", "Future"], ["Cats or dogs?", "Cats", "Dogs"], ["Lose your phone or your wallet?", "Phone", "Wallet"], ["Shower: morning or night?", "Morning", "Night"], ["Socks: always matching or don’t care?", "Always matching", "Don’t care"], ["3 floors: stairs or lift?", "Stairs", "Lift"], ["Rainy day: chai and pakoras or a long drive?", "Chai and pakoras", "Long drive"], ["Airport: early or just in time?", "Early", "Just in time"], ["Book first or movie first?", "Book", "Movie"], ["Live without music or without movies?", "Without music", "Without movies"], ["Sleep with fan or AC?", "Fan", "AC"], ["Holiday: plan everything or go with the flow?", "Plan everything", "Go with the flow"]]};
 
 /* ---------- Client-side text check (server checks again) ---------- */
 const BLOCK_WORDS = ["kill yourself","kys","go die","retard","slut","whore","faggot","nigger","rape","nude","nudes","naked","porn","onlyfans","xxx","sex tape","dick pic"];
@@ -89,10 +83,29 @@ const DEFAULT_ME = {votes:0,matches:0,days:[],today:{d:"",n:0},onboarded:false,s
 let ME = Object.assign({},DEFAULT_ME,lsGet("go-me",{}));
 const saveMe = () => lsSet("go-me",ME);
 function streak(){
-  const set = new Set(ME.days); let s=0; const d=new Date();
-  if(!set.has(d.toISOString().slice(0,10))) d.setDate(d.getDate()-1);
-  while(set.has(d.toISOString().slice(0,10))){ s++; d.setDate(d.getDate()-1); }
+  const set = new Set([...(ME.days||[]), ...((typeof S!=="undefined"&&S.me&&S.me.days)||[])]); let s=0; const d=new Date();
+  if(!set.has(dayKey(d))) d.setDate(d.getDate()-1);
+  while(set.has(dayKey(d))){ s++; d.setDate(d.getDate()-1); }
+  if(s>(ME.best||0)){ ME.best=s; saveMe(); }
   return s;
+}
+function openCredits(){
+  const R=S.me.referrals||{};
+  openSheet(`<h2>${S.me.credits} credits</h2><p class="sub">Credits let you ask the crowd. They’re yours to keep and never reset.</p>
+    <div class="stats"><div class="stat"><b>+1</b><span>For every vote while logged in</span></div><div class="stat"><b>+${R.reward||30}</b><span>When a friend joins from your link and votes 5 times</span></div><div class="stat"><b>−${POST_COST}</b><span>To post a text poll</span></div><div class="stat"><b>−${PHOTO_COST}</b><span>To post a photo poll</span></div></div>
+    <p class="note">New accounts start with ${SIGNUP_BONUS}. If your total climbs back up, that’s your votes earning credits.</p>
+    <div class="actions" style="margin:0"><button class="btn primary" id="crAsk">Ask a question</button><button class="btn" id="crVote">Keep voting</button></div>`);
+  $("#crAsk").onclick=()=>{ closeSheet(); location.hash="ask"; };
+  $("#crVote").onclick=()=>{ closeSheet(); location.hash="vote"; };
+}
+function openStreak(){
+  const st=streak(), today=new Set([...(ME.days||[]),...(S.me.days||[])]).has(todayKey());
+  openSheet(`<h2>🔥 ${st}-day streak</h2>
+    <p class="sub">Your streak counts the days in a row you’ve voted, not the number of votes.</p>
+    <div class="stats"><div class="stat"><b>${st}</b><span>Days in a row</span></div><div class="stat"><b>${ME.best||st}</b><span>Best streak</span></div><div class="stat"><b>${ME.today&&ME.today.d===todayKey()?ME.today.n:0}</b><span>Votes today</span></div><div class="stat"><b>${today?"✓":"–"}</b><span>${today?"Today counted":"Vote today to keep it"}</span></div></div>
+    <p class="note">${S.me.loggedIn?"Saved to your account, so it follows you on every device.":"Saved on this device only. Log in to keep your streak on every device and in the home screen app."}</p>
+    <button class="btn primary block" id="stOk">${today?"Keep voting":"Vote now"}</button>`);
+  $("#stOk").onclick=()=>{ closeSheet(); location.hash="vote"; };
 }
 
 /* ---------- State ---------- */
@@ -123,10 +136,11 @@ function softRender(){
 function updateChrome(){
   const cp=$("#creditPill");
   cp.textContent = S.me.loggedIn ? S.me.credits+(S.me.credits===1?" credit":" credits") : "Log in";
-  cp.style.cursor = S.me.loggedIn ? "default" : "pointer";
-  cp.onclick = S.me.loggedIn ? null : ()=>openLogin();
-  $("#streakPill").textContent = "🔥 "+streak();
+  cp.style.cursor = "pointer";
+  cp.onclick = S.me.loggedIn ? openCredits : ()=>openLogin();
+  const sp=$("#streakPill"); sp.textContent = "🔥 "+streak(); sp.style.cursor="pointer"; sp.onclick=openStreak; sp.setAttribute("role","button"); sp.setAttribute("tabindex","0"); sp.title="Days in a row you’ve voted. Tap for details";
   document.querySelectorAll(".nav a").forEach(a=>{ if(a.dataset.v===S.view) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
+  const ml=$("#meLabel"); if(ml){ ml.textContent = S.me.loggedIn&&S.me.nick ? S.me.nick : "Me"; ml.title = ml.textContent; }
 }
 
 /* ---------- Routing ---------- */
@@ -203,6 +217,7 @@ function renderFeed(v){
   $("#suBtn")&&($("#suBtn").onclick=()=>openLogin());
   const slot=$("#slot");
   if(!S.loaded){ slot.innerHTML=`<p class="status">Loading polls…</p>`; return; }
+  if(S.showNudge&&!S.revealing){ slot.appendChild(nudgeCard()); return; }
   let p = S.current && getPoll(S.current);
   if(!p || (myPick(p) && !S.revealing) || isHidden(p) || (S.cat!=="all"&&p.cat!==S.cat)) p=nextPoll();
   if(!p){
@@ -258,10 +273,11 @@ function buildCard(p,{feed=false,alias=null}={}){
 }
 
 function reveal(el,p,pick,animate){
+  const elsewhere = pick==="x"; if(elsewhere) pick="x"; // "x" = this account voted on another device, side unknown here
   const t=tally(p), split=el.querySelector(".split");
   split.classList.add("voted");
   const A=split.querySelector(".side-a"), B=split.querySelector(".side-b");
-  if(pick) (pick==="a"?A:B).classList.add("chosen");
+  if(pick==="a"||pick==="b") (pick==="a"?A:B).classList.add("chosen");
   el.querySelector(".count").textContent=fmt(t.t)+(t.t===1?" vote":" votes");
   const hint=el.querySelector(".hint"); if(hint) hint.textContent="";
   if(t.sealed){
@@ -273,7 +289,8 @@ function reveal(el,p,pick,animate){
     return;
   }
   // photo polls keep both photos the same size so neither gets squeezed; text polls resize to the split
-  const set=()=>{ if(p.kind==="image") return; A.style.flexGrow=Math.max(t.pa,22); B.style.flexGrow=Math.max(t.pb,22); };
+  const set=()=>{ if(p.kind==="image") return; A.style.flexGrow=Math.max(t.pa,34); B.style.flexGrow=Math.max(t.pb,34);
+    A.classList.toggle("narrow",t.pa<30); B.classList.toggle("narrow",t.pb<30); };
   if(animate) requestAnimationFrame(()=>requestAnimationFrame(set)); else set();
   countUp(A.querySelector(".pct"),t.pa,animate); countUp(B.querySelector(".pct"),t.pb,animate);
   const win = t.pa===t.pb ? null : (t.pa>t.pb?"a":"b");
@@ -283,13 +300,14 @@ function reveal(el,p,pick,animate){
     card.innerHTML=`<span class="vemoji" aria-hidden="true">${v.emoji}</span><span><b>${esc(v.headline)}</b><span>${esc(v.line)}</span>${v.note?`<small class="vnote">⚠️ ${esc(v.note)}</small>`:""}</span>`;
     el.querySelector(".split").before(card);
     if(v.kind==="win"){ (v.side==="a"?A:B).classList.add("winner"); (v.side==="a"?B:A).classList.add("loser"); }
-    el.querySelector(".verdict").textContent = !pick ? (isOwner(p)?"Your poll has been settled.":"Voting has closed.") : v.kind!=="win" ? `You picked ${pick.toUpperCase()}.` : pick===v.side ? "You called it! 🎯 You were with the winning side." : "You went the other way this time.";
+    el.querySelector(".verdict").textContent = elsewhere ? "You voted on this from another device." : !pick ? (isOwner(p)?"Your poll has been settled.":"Voting has closed.") : v.kind!=="win" ? `You picked ${pick.toUpperCase()}.` : pick===v.side ? "You called it! 🎯 You were with the winning side." : "You went the other way this time.";
     const sv=el.querySelector('[data-act="share"]'); if(sv&&v.kind==="win") sv.textContent="Share verdict";
     return;
   }
   let msg;
   const debateWin = p.cat==="debate"&&p.an&&p.bn ? (!win?"It’s a tie.":`${win==="a"?p.an:p.bn} wins, ${Math.max(t.pa,t.pb)}% to ${Math.min(t.pa,t.pb)}%.`) : null;
   if(isClosed(p)) msg = "Voting closed. "+(debateWin || (!t.t?"No votes came in.":!win?"It’s a perfect tie.":`The crowd picked ${win.toUpperCase()}, ${Math.max(t.pa,t.pb)}% to ${Math.min(t.pa,t.pb)}%.`));
+  else if(elsewhere) msg = "You already voted on this from another device. Here’s how everyone’s voting so far.";
   else if(!pick) msg = isOpenTimed(p) ? `Your poll. Voters see results in ${left(p.endsAt)}. You can watch live.` : t.t ? "Your poll. Live results above." : "Your poll. Share it to get the first votes.";
   else if(p.cat==="debate" && p.an && p.bn) msg = !win ? "Dead heat. Nobody wins this one yet." : `The crowd sides with ${win==="a"?p.an:p.bn}, ${Math.max(t.pa,t.pb)}% to ${Math.min(t.pa,t.pb)}%.`;
   else if(isOpenTimed(p)) msg = `Live result so far. The final verdict lands in ${left(p.endsAt)}, check back to see which way the crowd went.`;
@@ -312,7 +330,7 @@ function countUp(node,to,animate){
 
 let autoT=null;
 function stopAuto(el){ clearTimeout(autoT); el?.querySelector?.(".next")?.classList.remove("run"); }
-function goNext(){ clearTimeout(autoT); S.revealing=false; S.current=null; render(); if(S.askDemo){ S.askDemo=false; openDemo(); } }
+function goNext(){ clearTimeout(autoT); S.revealing=false; S.current=null; if(S.askDemo){ S.askDemo=false; render(); openDemo(); return; } render(); }
 
 async function castVote(el,p,s,alias){
   if(myPick(p)||isOwner(p)||isClosed(p)) return;
@@ -325,8 +343,8 @@ async function castVote(el,p,s,alias){
   const next=el.querySelector(".next");
   if(next){ next.hidden=false; if(!p.sealed){ next.classList.add("run"); autoT=setTimeout(goNext,2200); } }
   try{
-    const j=await api("/api/vote",{method:"POST",body:{id:p.id,side:s,member:alias||undefined,g:ME.g||undefined,age:ME.age||undefined}});
-    upsert(j.poll); S.me={...S.me,...j.me};
+    const j=await api("/api/vote",{method:"POST",body:{id:p.id,side:s,member:alias||undefined,g:ME.g||undefined,age:ME.age||undefined,day:todayKey()}});
+    upsert(j.poll); S.me={...S.me,...j.me,days:[...new Set([...(S.me.days||[]),...(j.me.loggedIn?[todayKey()]:[])])]};
     if(j.counted&&(isOpenTimed(j.poll)||j.poll.sealed)&&pushState()==="on") watchPoll(j.poll.id);
     if(j.counted){
       const t=tally(j.poll);
@@ -334,6 +352,7 @@ async function castVote(el,p,s,alias){
       const d=todayKey(); if(!ME.days.includes(d)) ME.days.push(d); ME.days=ME.days.slice(-60);
       ME.today = ME.today.d===d ? {d,n:ME.today.n+1} : {d,n:1};
       if(ME.votes>=5&&!ME.demoAsked) S.askDemo=true;
+      if(ME.votes>=(ME.nudgeAt||6)) S.showNudge=true;
       saveMe();
     }
     updateChrome();
@@ -341,7 +360,7 @@ async function castVote(el,p,s,alias){
     if(S.me.loggedIn&&S.me.credits===POST_COST) setTimeout(()=>toast("You can post again. Ask your next question!"),400);
     if(S.view==="poll"&&S.pollId===p.id) setTimeout(()=>{ if(S.view==="poll"&&S.pollId===p.id) renderPollPage($("#view")); },1400);
   }catch(e){
-    upsert(p); stopAuto(el); toast(e.message); S.revealing=false; render();
+    upsert(e.votedElsewhere?{...p,pick:"x"}:p); stopAuto(el); toast(e.message); S.revealing=false; render();
   }
 }
 
@@ -377,8 +396,8 @@ function renderAsk(v){
     ${isDebate?`<p class="note" style="margin-top:0">Arguing with a friend? Put both of your names on it. The crowd picks a winner, and you get a verdict card to send back to them.</p>`:""}
   </div>
   <div class="panel">
-    <h3>Need an idea?</h3>
-    <div class="prompts">${TEMPLATES[d.cat].map((t,i)=>`<button class="prompt" data-i="${i}">${esc(t[0])}<small>${t[3]?"Photo poll":t[1]?esc(t[1])+" or "+esc(t[2]):"Fill in both sides"}</small></button>`).join("")}</div>
+    <div class="actions" style="margin:0 0 8px"><h3 style="margin:0">Need an idea?</h3><span class="spacer"></span><button class="btn ghost" id="moreIdeas" style="padding:4px 8px">More ideas ↻</button></div>
+    <div class="prompts">${TEMPLATES[d.cat].map((t,i)=>[t,i]).slice(((S.ideaOff||{})[d.cat]||0),((S.ideaOff||{})[d.cat]||0)+5).map(([t,i])=>`<button class="prompt" data-i="${i}">${esc(t[0])}<small>${t[3]?"Photo poll":t[1]?esc(t[1])+" or "+esc(t[2]):"Fill in both sides"}</small></button>`).join("")}</div>
   </div>
   <div class="panel">
     <label class="lbl" for="q">Your question</label>
@@ -414,7 +433,7 @@ function renderAsk(v){
       <button data-vis="public" aria-pressed="${d.vis==="public"}">Public feed</button>
       <button data-vis="private" aria-pressed="${d.vis==="private"}">Private link</button>
     </div>
-    <p class="note">${d.vis==="public"?"Anyone browsing can vote. Nobody sees who asked or who voted.":"Only people with your link can vote, no account needed. Nobody ever sees who picked what."}</p>
+    <p class="note">${d.vis==="public"?(d.showName?"Anyone browsing can vote. Your nickname shows on this poll; votes stay anonymous.":"Anyone browsing can vote. Nobody sees who asked or who voted."):"Only people with your link can vote, no account needed. Nobody ever sees who picked what."}</p>
     ${d.vis==="private"?`<label class="lbl" for="roster" style="margin-top:12px">Who’s in the group? <span class="note">(optional)</span></label>
     <input class="field" id="roster" maxlength="600" placeholder="Aman, Riya, Kabir, Sana" value="${esc(d.roster)}">
     <p class="note">Add names, separated by commas, to see who’s voted and nudge the rest. Results stay hidden until everyone has voted${d.hours?" or time runs out":""}, so nobody can work out who picked what.</p>`:""}
@@ -437,13 +456,14 @@ function renderAsk(v){
   $("#consent")&&($("#consent").onchange=keep);
   $("#skinOk")&&($("#skinOk").onchange=e=>{ d.skinOk=e.target.checked; });
   $("#hideRes")&&($("#hideRes").onchange=e=>{ d.hideResults=e.target.checked; });
-  $("#showName").onchange=e=>{ d.showName=e.target.checked; };
+  $("#showName").onchange=e=>{ keep(); d.showName=e.target.checked; renderAsk(v); };
   $("#roster")&&($("#roster").oninput=e=>{ d.roster=e.target.value; });
   v.querySelectorAll(".chip[data-cat]").forEach(b=>b.onclick=()=>{ keep(); d.cat=b.dataset.cat; d.catManual=true; renderAsk(v); });
   v.querySelectorAll("[data-kind]").forEach(b=>b.onclick=()=>{ keep(); d.kind=b.dataset.kind; renderAsk(v); });
   v.querySelectorAll("[data-vis]").forEach(b=>b.onclick=()=>{ keep(); d.vis=b.dataset.vis; renderAsk(v); });
   v.querySelectorAll("[data-hours]").forEach(b=>b.onclick=()=>{ keep(); d.hours=+b.dataset.hours; renderAsk(v); });
   applySuggestion();
+  $("#moreIdeas").onclick=()=>{ keep(); S.ideaOff=S.ideaOff||{}; const n=TEMPLATES[d.cat].length; S.ideaOff[d.cat]=(((S.ideaOff[d.cat]||0)+5)%n); renderAsk(v); };
   v.querySelectorAll(".prompt").forEach(b=>b.onclick=()=>{ const t=TEMPLATES[d.cat][+b.dataset.i]; d.catManual=true; d.q=t[0]; d.kind=t[3]?"image":"text"; d.a=t[1]; d.b=t[2]; renderAsk(v); $("#q").focus(); });
   v.querySelectorAll('input[type="file"]').forEach(inp=>inp.onchange=async()=>{ keep(); const f=inp.files[0]; if(!f) return; await loadPhoto(f,inp.dataset.s); renderAsk(v); });
   $("#post").onclick=()=>{ keep(); submitPoll(); };
@@ -520,12 +540,18 @@ async function submitPoll(){
   posting=true; const btn=$("#post"); btn.disabled=true; btn.textContent=d.kind==="image"?"Screening photos…":"Posting…";
   try{
     const j=await api("/api/polls",{method:"POST",body:{hideResults:!!d.hideResults&&d.hours>0,skinFlag:d.kind==="image"&&((d.askin||0)>.6||(d.bskin||0)>.6),roster:d.vis==="private"?parseRoster(d.roster):[],showName:d.showName,hours:d.hours,cat:d.cat,q,a,b,an:d.an,bn:d.bn,kind:d.kind,vis:d.vis,ai:d.ai,bi:d.bi,consent:d.consent}});
-    S.me={...S.me,...j.me}; upsert(j.poll);
+    S.me={...S.me,...j.me}; upsert(j.poll); S.showNudge=false; ME.nudgeAt=(ME.votes||0)+20; saveMe();
     Object.assign(DRAFT,{hideResults:false,skinOk:false,hours:24,catManual:false,cat:"random",roster:"",showName:false,q:"",a:"",b:"",an:"",bn:"",ai:null,bi:null,consent:false,checks:{},askin:0,bskin:0});
     posting=false; location.hash="mine"; setTimeout(()=>openShare(j.poll,true),150);
   }catch(e){
     posting=false; btn.disabled=false; btn.textContent=`Post for ${cost} credits`; err.textContent=e.message;
     if(e.status===401){ S.me={loggedIn:false,credits:0}; openLogin(); }
+    if(e.needAdult){ err.textContent=""; openSheet(`<h2>One quick check</h2><p class="sub">Posting on Get Opinion is for people 18 and older.</p>
+      <label class="check"><input type="checkbox" id="adOk"><span>I’m 18 or older and agree to the Terms and Privacy note.</span></label><p class="err" id="adErr"></p>
+      <button class="btn primary block" id="adGo" style="margin-top:8px">Confirm and post</button><button class="btn ghost block" id="adNo">Cancel</button>`);
+      $("#adNo").onclick=closeSheet;
+      $("#adGo").onclick=async()=>{ if(!$("#adOk").checked){ $("#adErr").textContent="Tick the box to confirm."; return; } try{ await api("/api/me/adult",{method:"POST",body:{adult:true}}); closeSheet(); submitPoll(); }catch(x){ $("#adErr").textContent=x.message; } };
+    }
   }
 }
 
@@ -558,7 +584,7 @@ function renderMine(v){
 
 /* ---------- Single poll page (private links) ---------- */
 async function renderPollPage(v){
-  v.innerHTML=`<div style="margin:4px 0 12px"><a class="btn ghost" href="#vote" style="padding-left:0">‹ Back to feed</a></div><div id="pp"><p class="status">Loading poll…</p></div>`;
+  v.innerHTML=`<div style="margin-top:4px;margin-bottom:12px"><a class="btn" href="#vote">‹ Back to feed</a></div><div id="pp"><p class="status">Loading poll…</p></div>`;
   const id=S.pollId; let p=getPoll(id);
   if(!p){ try{ p=(await api("/api/poll/"+encodeURIComponent(id))).poll; S.extra[id]=p; }catch{ p=null; } }
   if(S.view!=="poll"||S.pollId!==id) return;
@@ -574,7 +600,12 @@ async function renderPollPage(v){
     pp.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{ ME.member[p.id]=b.dataset.m; saveMe(); renderPollPage(v); });
     return;
   }
-  pp.appendChild(buildCard(p,{alias:p.roster?(ME.member&&ME.member[p.id])||null:null}));
+  const pcard=buildCard(p,{alias:p.roster?(ME.member&&ME.member[p.id])||null:null});
+  { const acts=pcard.querySelector(".actions"); const sp=document.createElement("span"); sp.className="spacer";
+    const nx=document.createElement("a"); nx.className="btn primary"; nx.href="#vote";
+    nx.textContent = myPick(p)||isOwner(p)||isSettled(p) ? "Next poll ›" : "Skip to more polls ›";
+    acts.append(sp,nx); }
+  pp.appendChild(pcard);
   if(p.roster){
     pp.appendChild(groupPanel(p));
     if(!isOwner(p)&&!myPick(p)&&ME.member&&ME.member[p.id]){ const n=document.createElement("p"); n.className="note"; n.style.textAlign="center"; n.textContent=`Voting as ${ME.member[p.id]}. `; const ch=document.createElement("button"); ch.className="btn ghost"; ch.textContent="Not you?"; ch.onclick=()=>{ delete ME.member[p.id]; saveMe(); renderPollPage(v); }; n.appendChild(ch); pp.appendChild(n); }
@@ -589,6 +620,23 @@ async function renderPollPage(v){
     more.textContent="Vote to see what everyone else picked.";
     pp.appendChild(more);
   }
+}
+
+/* ---------- "Your turn" nudge in the feed ---------- */
+function nudgeCard(){
+  const cats=Object.keys(TEMPLATES).sort(()=>Math.random()-.5).slice(0,3);
+  const picks=cats.map(c=>{ const l=TEMPLATES[c].filter(t=>t[1]||t[3]); return [c,l[Math.floor(Math.random()*l.length)]]; });
+  const el=document.createElement("article"); el.className="card nudge";
+  el.innerHTML=`<p class="tag debate" style="display:inline-block;margin:0 0 10px">Your turn 🎯</p>
+    <h2 class="q">You’ve settled ${ME.votes} dilemmas for others. Let the crowd settle one for you.</h2>
+    <p class="note" style="margin:-4px 0 14px">Stuck between two options? Strangers answer in minutes, and it’s anonymous.${S.me.loggedIn?"":` Log in and get ${SIGNUP_BONUS} free credits to ask.`}</p>
+    <div class="prompts">${picks.map(([c,t],i)=>`<button class="prompt" data-n="${i}">${catOf(c).e} ${esc(t[0])}<small>${t[3]?"Photo poll":esc(t[1])+" or "+esc(t[2])}</small></button>`).join("")}</div>
+    <div class="actions"><button class="btn ghost" data-x="later">Keep voting</button><span class="spacer"></span><a class="btn primary" href="#ask" data-x="own">Ask my own ›</a></div>`;
+  const done=(gap)=>{ S.showNudge=false; ME.nudgeAt=ME.votes+gap; saveMe(); };
+  el.querySelectorAll("[data-n]").forEach(b=>b.onclick=()=>{ const [c,t]=picks[+b.dataset.n]; Object.assign(DRAFT,{cat:c,catManual:true,q:t[0],a:t[1]||"",b:t[2]||"",kind:t[3]?"image":"text"}); done(20); location.hash="ask"; });
+  el.querySelector('[data-x="own"]').onclick=()=>done(20);
+  el.querySelector('[data-x="later"]').onclick=()=>{ done(12); render(); };
+  return el;
 }
 
 /* ---------- Extend (poster only) ---------- */
@@ -611,7 +659,7 @@ function extendBox(p){
 
 /* ---------- Group polls: who has voted (never what they picked) ---------- */
 function groupState(p){ const voted=p.votedNames||[], lc=new Set(voted.map(n=>n.toLowerCase())); return {voted, pending:(p.roster||[]).filter(n=>!lc.has(n.toLowerCase()))}; }
-function nudgeText(p){ const {pending}=groupState(p); return `Hey ${pending.join(", ")}! Still waiting on your vote 👀 “${p.q}” Takes 2 seconds: ${shareLink(p)}`; }
+function nudgeText(p){ const {pending}=groupState(p); return `Hey ${pending.join(", ")}! Still waiting on your vote: “${p.q}” Takes 2 seconds: ${shareLink(p)}`; }
 function groupPanel(p){
   const {voted,pending}=groupState(p);
   const box=document.createElement("div"); box.className="panel"; box.style.marginTop="14px";
@@ -741,7 +789,7 @@ function renderMe(v){
 function openSheet(html){ $("#sheet").innerHTML=`<div class="grab"></div>`+html; $("#scrim").classList.add("open"); const f=$("#sheet").querySelector("input,button"); f?.focus(); }
 function closeSheet(){ $("#scrim").classList.remove("open"); }
 $("#scrim").addEventListener("click",e=>{ if(e.target.id==="scrim") closeSheet(); });
-document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeSheet(); });
+document.addEventListener("keydown",e=>{ if(e.key!=="Escape") return; if($("#scrim").classList.contains("open")) closeSheet(); else if(S.view==="poll"||S.view==="user") location.hash="vote"; });
 
 /* ---------- Email login ---------- */
 function openLogin(){
@@ -780,11 +828,14 @@ function codeStep(email,j){
     if(j.isNew){ nick=$("#nk").value.trim(); if(nick.length<2){ e.textContent="Pick a nickname of at least 2 characters."; return; } if(screenText(nick)){ e.textContent="Pick a different nickname."; return; } if(!$("#agree").checked){ e.textContent="Confirm you’re 18 or older and agree to the Terms to continue."; return; } }
     btn.disabled=true;
     try{
-      const r=await api("/api/auth/verify",{method:"POST",body:{email,code,nick,ref:lsGet("go-ref",""),adult:j.isNew?!!$("#agree")?.checked:undefined}});
+      const r=await api("/api/auth/verify",{method:"POST",body:{email,code,nick,ref:lsGet("go-ref",""),adult:(j.isNew||j.needAdult)?!!$("#agree")?.checked:undefined}});
       clearInterval(tm); closeSheet(); S.me=r.me;
       toast(r.bonus?`Welcome! +${r.bonus+(r.refBonus||0)} credits${r.refBonus?" (incl. "+r.refBonus+" from your friend’s invite)":""}`:`Welcome back, ${r.me.nick}`);
       await refresh(); syncPush();
-    }catch(err){ btn.disabled=false; e.textContent=err.message; }
+    }catch(err){
+      btn.disabled=false; e.textContent=err.message;
+      if(err.needAdult&&!$("#agree")){ const l=document.createElement("label"); l.className="check"; l.innerHTML=`<input type="checkbox" id="agree"><span>I’m 18 or older and agree to the Terms and Privacy note.</span>`; e.before(l); j.needAdult=true; }
+    }
   };
   $("#cgo").onclick=go; $("#cd").onkeydown=e=>{ if(e.key==="Enter") go(); };
   const back=()=>codeStep(email,j);
@@ -796,11 +847,11 @@ function codeStep(email,j){
 function openPrivacy(fromLogin,onBack){
   openSheet(`<h2>Privacy note</h2><p class="sub">Plain and short: what Get Opinion stores, and why.</p>
   <h3 style="font-size:1rem;margin:12px 0 4px">If you log in</h3>
-  <p class="note" style="margin:0">Your email, to send login codes. Your nickname and credits. None of this is ever shown to other people.</p>
+  <p class="note" style="margin:0">Your email (only to send login codes), your nickname and your credits. Your email and credits are never shown to anyone. Your nickname appears only where you choose to show it: on polls you post with “Show my nickname” (and your public profile of those polls), and on the voter leaderboard if you turn that on. If you join from a friend’s invite link, they’re told your nickname joined, and you see theirs.</p>
   <h3 style="font-size:1rem;margin:12px 0 4px">Polls you post</h3>
-  <p class="note" style="margin:0">Your question, options and any photos (resized on your phone first). Public polls never show who posted them.</p>
+  <p class="note" style="margin:0">Your question, options and any photos (resized on your phone first). Polls are anonymous by default: nobody sees who posted them unless you turn on “Show my nickname” for that poll. In Settle a Debate, the two names you type for each side are shown, so use names your friends are happy to have on it.</p>
   <h3 style="font-size:1rem;margin:12px 0 4px">Your votes</h3>
-  <p class="note" style="margin:0">Saved with a random ID kept in your browser, not with your account or email, so votes can’t be traced back to you.</p>
+  <p class="note" style="margin:0">Saved with a random ID kept in your browser, not with your account or email, so votes can’t be traced back to you. When you’re logged in, we also keep a scrambled check mark for each poll you vote on, so you can’t vote twice from another device. It records that you voted, never which side.</p>
   <h3 style="font-size:1rem;margin:12px 0 4px">Emails</h3>
   <p class="note" style="margin:0">We email you only the login code you ask for. Nothing else, ever: no newsletters, no marketing.</p>
   <h3 style="font-size:1rem;margin:12px 0 4px">Notifications</h3>
@@ -978,21 +1029,22 @@ function openFlag(p){
 /* ---------- Share ---------- */
 const shareLink = p => location.origin+"/p/"+p.id+(S.me.refCode?"?r="+S.me.refCode:"");
 function hooks(p){
-  if(isOpenTimed(p)) return [`Results drop in ${left(p.endsAt)} ⏳ Lock in your pick:`, p.cat==="debate"&&p.an&&p.bn?`${p.an} vs ${p.bn}. Vote before it closes.`:`Settle this before voting closes: ${p.q}`, `Anonymous. Takes 2 seconds. Results in ${left(p.endsAt)}.`];
-  if(p.cat==="debate"&&p.an&&p.bn) return [`${p.an} vs ${p.bn}. Settle it for us 👀`,`We can’t agree: ${p.q} Pick a side.`,`Loser buys dinner. Who’s right?`];
-  return [`Settle this for me 👀 A or B?`,`Be brutally honest: ${p.q}`,`I can’t decide. You pick, it’s anonymous.`];
+  if(isOpenTimed(p)) return [`Verdict in ${left(p.endsAt)}. Lock in your pick:`, p.cat==="debate"&&p.an&&p.bn?`${p.an} vs ${p.bn}. Vote before it closes.`:`Settle this before voting closes: ${p.q}`, `Anonymous. Takes 2 seconds. Verdict in ${left(p.endsAt)}.`];
+  if(p.cat==="debate"&&p.an&&p.bn) return [`${p.an} vs ${p.bn}. Settle it for us!`,`We can’t agree: ${p.q} Pick a side.`,`Loser buys dinner. Who’s right?`];
+  return [`Settle this for me: A or B?`,`Be brutally honest: ${p.q}`,`I can’t decide. You pick, it’s anonymous.`];
 }
 async function openShare(p,justPosted,verdictMode){
   const V = verdictMode ? verdictOf(p) : null;
-  const link=shareLink(p), hs=V?[`${V.emoji} ${V.headline}! ${p.q} ${V.line}`,`The crowd has spoken: ${V.line}`,`Called it or not? ${p.q} ${V.line}`]:hooks(p);
+  const link=shareLink(p), hs=V?[`${V.headline}! ${p.q} ${V.line}`,`The crowd has spoken: ${V.line}`,`Called it or not? ${p.q} ${V.line}`]:hooks(p);
   openSheet(`<h2>${V?"Share the verdict":justPosted?"Your poll is live":"Share this poll"}</h2>
   <p class="sub" style="margin-bottom:6px">${p.vis==="private"?"Send the link to your group. They vote in two taps, anonymously, no account needed.":"Post it to your Story or Status to pull in fast votes."}</p>
   <div class="story"><canvas id="sc" width="1080" height="1920" aria-label="Story image preview"></canvas></div>
   <div class="share-grid">
-    <button class="btn accent" id="shWa">WhatsApp</button>
+    <button class="btn accent" id="shWaS">WhatsApp Status</button>
+    <button class="btn accent" id="shWa">WhatsApp chat</button>
     <button class="btn accent" id="shIg">Instagram Story</button>
     <button class="btn" id="shCopy">Copy link</button>
-    <button class="btn" id="shSave">Save image</button>
+    <button class="btn" id="shSave" style="grid-column:1/-1">Save image</button>
   </div>
   <div class="linkbox"><input class="field" id="lk" readonly value="${esc(link)}" aria-label="Poll link"></div>
   <p class="note">${S.me.loggedIn?`🎁 This link carries your invite. Earn ${S.me.referrals?.reward||30} credits for each friend who signs up and casts ${S.me.referrals?.need||5} votes.`:`🎁 Log in before sharing to earn credits when friends join from your link.`}</p>
@@ -1014,7 +1066,34 @@ async function openShare(p,justPosted,verdictMode){
     return "saved";
   };
   $("#shSave").onclick=async()=>{ const r=await saveImg(false); if(r==="saved") toast("Story image saved"); };
-  $("#shIg").onclick=async()=>{ await copyText(link); const r=await saveImg(false); if(r!=="aborted") toast("Link copied. Add the image to your Story, then add a link sticker."); };
+  // WhatsApp has no web link for Status: share the image through the phone's share menu, where WhatsApp lists "My status"
+  $("#shWaS").onclick=async()=>{
+    await copyText(shareText);
+    const b=await blob(); const file=new File([b],"get-opinion-story.png",{type:"image/png"});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      toast("Choose WhatsApp, then tap “My status”. The caption with the link is copied: paste it if it’s missing.");
+      try{ await navigator.share({files:[file],text:shareText}); }catch(e){}
+      return;
+    }
+    const r=await saveImg(false);
+    if(r==="saved") openSheet(`<h2>Post it to WhatsApp Status</h2><p class="sub">Status can only be posted from the WhatsApp app on your phone.</p>
+      <ol style="padding-left:20px;margin:0 0 12px"><li style="margin-bottom:8px">The image is saved and the caption with the link is copied.</li><li style="margin-bottom:8px">Send the image to your phone, or open this poll on your phone and tap <b>WhatsApp Status</b> there.</li><li>In WhatsApp, go to <b>Updates → My status</b>, pick the image and paste the caption.</li></ol>
+      <button class="btn primary block" id="wsOk">Got it</button>`), $("#wsOk").onclick=closeSheet;
+  };
+  // Instagram has no web link for Stories either: share the image through the phone's share menu, then pick Instagram → Story
+  $("#shIg").onclick=async()=>{
+    await copyText(link);
+    const b=await blob(); const file=new File([b],"get-opinion-story.png",{type:"image/png"});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      toast("Choose Instagram, then “Story”. The poll link is copied: add it with the Link sticker.");
+      try{ await navigator.share({files:[file]}); }catch(e){}
+      return;
+    }
+    const r=await saveImg(false);
+    if(r==="saved") openSheet(`<h2>Post it to your Instagram Story</h2><p class="sub">Stories can only be posted from the Instagram app on your phone.</p>
+      <ol style="padding-left:20px;margin:0 0 12px"><li style="margin-bottom:8px">The image is saved and the poll link is copied.</li><li style="margin-bottom:8px">Send the image to your phone, or open this poll on your phone and tap <b>Instagram Story</b> there.</li><li>In Instagram, add a Story with the image, tap the <b>sticker</b> icon, choose <b>Link</b> and paste the poll link.</li></ol>
+      <button class="btn primary block" id="igOk">Got it</button>`), $("#igOk").onclick=closeSheet;
+  };
 }
 
 function wrap(ctx,text,maxW){ const words=String(text).split(/\s+/); const lines=[]; let cur=""; for(const w of words){ const t=cur?cur+" "+w:w; if(ctx.measureText(t).width>maxW&&cur){ lines.push(cur); cur=w; } else cur=t; } if(cur) lines.push(cur); return lines; }
